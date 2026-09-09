@@ -25,7 +25,7 @@
 
 var PLACES = 'places';
 var REVIEWS = 'reviews';
-var PLACE_COLS = ['id', 'name', 'category', 'address', 'lat', 'lng', 'createdAt'];
+var PLACE_COLS = ['id', 'name', 'category', 'address', 'lat', 'lng', 'gRating', 'gCount', 'gUrl', 'gReviews', 'createdAt'];
 var REVIEW_COLS = ['id', 'placeId', 'taste', 'price', 'mood', 'service', 'hygiene', 'comment', 'createdAt', 'editedAt'];
 var DIM_KEYS = ['taste', 'price', 'mood', 'service', 'hygiene'];
 
@@ -171,6 +171,74 @@ function kakaoCat_(gcode, cname) {
   return '기타';
 }
 
+/* ---------- 구글 플레이스: 남들 평점/리뷰 ---------- */
+
+function googlePlace_(query) {
+  var key = PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY');
+  if (!key) return null;
+  var q = String(query || '').trim();
+  if (!q) return null;
+  try {
+    var f = UrlFetchApp.fetch(
+      'https://maps.googleapis.com/maps/api/place/findplacefromtext/json?inputtype=textquery&language=ko&fields=place_id&input='
+      + encodeURIComponent(q) + '&key=' + key, { muteHttpExceptions: true });
+    var fj = JSON.parse(f.getContentText());
+    var cand = (fj.candidates || [])[0];
+    if (!cand || !cand.place_id) return null;
+
+    var d = UrlFetchApp.fetch(
+      'https://maps.googleapis.com/maps/api/place/details/json?language=ko&fields=rating,user_ratings_total,url,reviews&place_id='
+      + encodeURIComponent(cand.place_id) + '&key=' + key, { muteHttpExceptions: true });
+    var r = (JSON.parse(d.getContentText()).result) || {};
+
+    var reviews = (r.reviews || []).slice(0, 3).map(function (x) {
+      return {
+        a: String(x.author_name || '').slice(0, 30),
+        r: x.rating || 0,
+        w: String(x.relative_time_description || '').slice(0, 20),
+        t: String(x.text || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+      };
+    });
+    return {
+      gRating: r.rating || '',
+      gCount: r.user_ratings_total || '',
+      gUrl: r.url || '',
+      gReviews: reviews.length ? JSON.stringify(reviews) : ''
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function backfillGoogle() {
+  if (!PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY')) {
+    throw new Error('먼저 스크립트 속성에 GOOGLE_PLACES_KEY 를 등록하세요 (README 참고).');
+  }
+  var sh = sheet_(PLACES, PLACE_COLS);
+  var last = sh.getLastRow();
+  if (last < 2) return '가게가 없습니다.';
+  var h = headerOf_(sh);
+  var iR = h.indexOf('gRating'), iC = h.indexOf('gCount'), iU = h.indexOf('gUrl'),
+      iRv = h.indexOf('gReviews'), iN = h.indexOf('name'), iA = h.indexOf('address');
+  var rng = sh.getRange(2, 1, last - 1, h.length);
+  var vals = rng.getValues();
+  var done = 0, fail = 0, skip = 0;
+  for (var r = 0; r < vals.length; r++) {
+    if (vals[r][iR] !== '' && vals[r][iR] != null) { skip++; continue; }
+    var gp = googlePlace_(String(vals[r][iN] || '') + ' ' + String(vals[r][iA] || ''));
+    if (gp) {
+      vals[r][iR] = gp.gRating; vals[r][iC] = gp.gCount;
+      vals[r][iU] = gp.gUrl; vals[r][iRv] = gp.gReviews;
+      done++;
+    } else fail++;
+    Utilities.sleep(250);
+  }
+  rng.setValues(vals);
+  var msg = '구글 평점 채움 ' + done + ' · 실패 ' + fail + ' · 이미있음 ' + skip;
+  Logger.log(msg);
+  return msg;
+}
+
 /* ---------- read ---------- */
 
 function getAll() {
@@ -200,13 +268,18 @@ function addPlace(p) {
     } else {
       try { g = geocode_(address, name); } catch (e) { g = null; }
     }
+    var gp = null;
+    try { gp = googlePlace_(name + ' ' + address); } catch (e) { gp = null; }
+
     appendObj_(sh, {
       id: Utilities.getUuid(),
       name: name, category: category, address: address,
       lat: g ? g.lat : '', lng: g ? g.lng : '',
+      gRating: gp ? gp.gRating : '', gCount: gp ? gp.gCount : '',
+      gUrl: gp ? gp.gUrl : '', gReviews: gp ? gp.gReviews : '',
       createdAt: Date.now()
     });
-    return { ok: true, geocoded: !!g };
+    return { ok: true, geocoded: !!g, google: !!gp };
   } finally {
     lock.releaseLock();
   }
@@ -322,6 +395,13 @@ function diag() {
   var s = searchPlaces('스타벅스 강남역');
   Logger.log('searchPlaces  ok=' + s.ok + '  items=' + ((s.items || []).length) + '  error=' + (s.error || '-'));
   if ((s.items || []).length) Logger.log('첫 결과: ' + JSON.stringify(s.items[0]));
+
+  var gkey = PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY');
+  Logger.log('GOOGLE_PLACES_KEY: ' + (gkey ? (gkey.length + '자') : '없음'));
+  if (gkey) {
+    var gp = googlePlace_('스타벅스 강남역점');
+    Logger.log('googlePlace  ' + (gp ? ('rating=' + gp.gRating + ' count=' + gp.gCount + ' reviews=' + (gp.gReviews ? JSON.parse(gp.gReviews).length : 0)) : 'null (키/결제/Places API 확인)'));
+  }
 }
 
 /* ---------- 진단: 카카오 키/응답 확인 (편집기에서 직접 실행) ---------- */

@@ -249,8 +249,27 @@
     color:var(--ink-soft);margin-top:5px;
   }
 
+  .ext-rating{
+    font:inherit;font-size:11px;font-weight:700;color:var(--ink-soft);
+    text-decoration:none;cursor:pointer;
+    background:var(--paper-2);border-radius:999px;padding:2px 8px;
+  }
+  .ext-rating:hover{color:var(--ink)}
+
   /* panel */
   .panel{grid-column:1 / -1;margin-top:12px;padding:16px 18px;border-radius:14px;background:var(--paper-2);cursor:default}
+  .gsec{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--surface);margin-bottom:14px}
+  .gsec-h{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--ink)}
+  .gsec-h .gsec-score{color:var(--amber);font-weight:700}
+  .gsec-h a{margin-left:auto;font-size:11px;font-weight:700;color:var(--focus);text-decoration:none}
+  .grev{padding:8px 0;border-top:1px solid var(--line);font-size:12.5px}
+  .grev:first-of-type{border-top:none}
+  .grev-head{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+  .grev-head b{color:var(--ink)}
+  .grev-star{color:var(--amber);font-weight:700;font-size:11px}
+  .grev-w{color:var(--ink-3);font-size:11px}
+  .grev-t{margin-top:3px;color:var(--ink-soft);line-height:1.5}
+  .revs-h{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:2px}
   .rev{padding:12px 0;border-bottom:1px solid var(--line);font-size:13px}
   .rev:last-of-type{border-bottom:none}
   .rev-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -459,6 +478,14 @@
     for(var i=0;i<DIMS.length;i++) s += (+r[DIMS[i][0]] || 0);
     return s / DIMS.length;
   }
+  function safeArr(s){
+    try { var v = JSON.parse(s); return Array.isArray(v) ? v : []; } catch(e){ return []; }
+  }
+  function fmtCount(n){
+    n = +n || 0;
+    if(n >= 10000) return (n/10000).toFixed(1).replace(/\.0$/,"") + "만";
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
   function relTime(ts){
     var s = (nowMs() - ts) / 1000;
     if(s < 60) return "방금";
@@ -507,6 +534,7 @@
   function loadAll(silent){
     return gsRun("getAll").then(function(data){
       state.places = (data.places || []).map(function(p){
+        var gr = parseFloat(p.gRating);
         return {
           id: String(p.id),
           name: String(p.name == null ? "" : p.name),
@@ -514,6 +542,10 @@
           address: String(p.address == null ? "" : p.address),
           lat: Number(p.lat) || 0,
           lng: Number(p.lng) || 0,
+          gRating: isFinite(gr) ? gr : 0,
+          gCount: +p.gCount || 0,
+          gUrl: String(p.gUrl || ""),
+          gReviews: safeArr(p.gReviews),
           createdAt: +p.createdAt || 0
         };
       });
@@ -582,6 +614,7 @@
       var a = aggReviews(rs);
       return { id:p.id, name:p.name, category:p.category, address:p.address,
                lat:p.lat, lng:p.lng,
+               gRating:p.gRating, gCount:p.gCount, gUrl:p.gUrl, gReviews:p.gReviews,
                createdAt:p.createdAt, reviews:rs, count:a.count, dimAvg:a.dimAvg, overall:a.overall };
     });
   }
@@ -696,6 +729,25 @@
     }).join("");
     if(!revs) revs = '<div class="rev" style="color:var(--ink-soft)">아직 평가가 없어요. 첫 평가를 남겨 주세요.</div>';
 
+    var gsec = "";
+    if(p.gReviews && p.gReviews.length){
+      gsec = '<div class="gsec">' +
+        '<div class="gsec-h">구글 리뷰' +
+          '<span class="gsec-score">' + (p.gRating ? '★' + p.gRating.toFixed(1) : '') + (p.gCount ? ' · ' + fmtCount(p.gCount) : '') + '</span>' +
+          (p.gUrl ? '<a href="' + esc(p.gUrl) + '" target="_blank" rel="noopener noreferrer">더보기</a>' : '') +
+        '</div>' +
+        p.gReviews.map(function(x){
+          return '<div class="grev">' +
+            '<div class="grev-head"><b>' + esc(x.a || "익명") + '</b>' +
+              '<span class="grev-star">★' + (+x.r || 0) + '</span>' +
+              (x.w ? '<span class="grev-w">' + esc(x.w) + '</span>' : '') +
+            '</div>' +
+            (x.t ? '<div class="grev-t">' + esc(x.t) + '</div>' : '') +
+          '</div>';
+        }).join("") +
+      '</div>';
+    }
+
     var d = getDraft(p.id);
     var rateGrid = DIMS.map(function(x){
       var key = x[0], label = x[1];
@@ -709,6 +761,8 @@
     }).join("");
 
     return '<div class="panel">' +
+      gsec +
+      (gsec ? '<div class="revs-h">우리 평가</div>' : '') +
       '<div class="revs">' + revs + '</div>' +
       '<div class="revform">' +
         (isEditing ? '<div class="revform-edit">평가 수정 중</div>' : '') +
@@ -737,6 +791,9 @@
           '<span class="cat ' + (p.category === "카페" ? "cafe" : "food") + '">' + esc(p.category) + '</span>' +
           (p.address ? '<span>' + esc(p.address) + '</span>' : '') +
           '<a class="meta-map" href="' + mapUrl(p.name, p.address) + '" target="_blank" rel="noopener noreferrer">지도</a>' +
+          (p.gRating
+            ? '<a class="ext-rating" href="' + esc(p.gUrl || "#") + '" target="_blank" rel="noopener noreferrer">구글 ★' + p.gRating.toFixed(1) + (p.gCount ? ' · ' + fmtCount(p.gCount) : '') + '</a>'
+            : '') +
           '<span>' + relTime(p.createdAt) + ' 등록</span>' +
         '</div>' +
         '<div class="dims">' +
