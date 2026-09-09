@@ -40,7 +40,7 @@ function doGet() {
       + '화면 파일을 불러오지 못했어요: ' + e + '</body>';
   }
   return HtmlService.createHtmlOutput(html)
-    .setTitle('점심 장부')
+    .setTitle('고수의집밥 맛집탐방')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
