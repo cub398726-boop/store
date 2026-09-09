@@ -453,6 +453,8 @@
           name: String(p.name == null ? "" : p.name),
           category: String(p.category == null ? "기타" : p.category) || "기타",
           address: String(p.address == null ? "" : p.address),
+          lat: Number(p.lat) || 0,
+          lng: Number(p.lng) || 0,
           createdAt: +p.createdAt || 0
         };
       });
@@ -519,6 +521,7 @@
       var rs = (byPlace[p.id] || []).slice().sort(function(a,b){ return b.createdAt - a.createdAt; });
       var a = aggReviews(rs);
       return { id:p.id, name:p.name, category:p.category, address:p.address,
+               lat:p.lat, lng:p.lng,
                createdAt:p.createdAt, reviews:rs, count:a.count, dimAvg:a.dimAvg, overall:a.overall };
     });
   }
