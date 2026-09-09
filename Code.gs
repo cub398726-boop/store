@@ -129,6 +129,48 @@ function geocode_(address, fallbackName) {
   }
 }
 
+/* ---------- 업체명 검색 (카카오 키워드) ---------- */
+
+function searchPlaces(query) {
+  var key = PropertiesService.getScriptProperties().getProperty('KAKAO_REST_KEY');
+  if (!key) return { ok: false, error: 'no_key', items: [] };
+  var q = String(query || '').trim();
+  if (q.length < 2) return { ok: true, items: [] };
+  try {
+    var res = UrlFetchApp.fetch(
+      'https://dapi.kakao.com/v2/local/search/keyword.json?size=12&query=' + encodeURIComponent(q),
+      { method: 'get', headers: { Authorization: 'KakaoAK ' + key }, muteHttpExceptions: true }
+    );
+    if (res.getResponseCode() !== 200) return { ok: false, error: 'http_' + res.getResponseCode(), items: [] };
+    var docs = (JSON.parse(res.getContentText()).documents) || [];
+    var items = docs.map(function (d) {
+      return {
+        name: d.place_name || '',
+        address: d.road_address_name || d.address_name || '',
+        lat: Number(d.y) || 0,
+        lng: Number(d.x) || 0,
+        category: kakaoCat_(d.category_group_code, d.category_name)
+      };
+    }).filter(function (it) { return it.name && it.lat && it.lng; });
+    return { ok: true, items: items };
+  } catch (e) {
+    return { ok: false, error: String(e), items: [] };
+  }
+}
+
+function kakaoCat_(gcode, cname) {
+  if (gcode === 'CE7') return '카페';
+  cname = String(cname || '');
+  if (/중식|중국/.test(cname)) return '중식';
+  if (/일식|초밥|스시|돈[까카]스|라멘|우동|규동/.test(cname)) return '일식';
+  if (/양식|파스타|피자|스테이크|이탈리|프렌치|스파게티|버거|햄버거/.test(cname)) return '양식';
+  if (/분식|떡볶이|김밥/.test(cname)) return '분식';
+  if (/아시아|베트남|태국|쌀국수|인도|타이|중동|케밥/.test(cname)) return '아시안';
+  if (/한식|국밥|백반|찌개|해장|김치|칼국수|국수|고기|족발|보쌈|냉면|부대|순대|곰탕|설렁탕/.test(cname)) return '한식';
+  if (/카페|커피|디저트|베이커리|제과|빵/.test(cname)) return '카페';
+  return '기타';
+}
+
 /* ---------- read ---------- */
 
 function getAll() {
@@ -152,7 +194,12 @@ function addPlace(p) {
     if (!address) throw new Error('주소가 필요합니다');
     var sh = sheet_(PLACES, PLACE_COLS);
     var g = null;
-    try { g = geocode_(address, name); } catch (e) { g = null; }
+    var clat = Number(p && p.lat), clng = Number(p && p.lng);
+    if (clat && clng && Math.abs(clat) <= 90 && Math.abs(clng) <= 180) {
+      g = { lat: clat, lng: clng };            // 검색에서 고른 경우: 그대로 사용
+    } else {
+      try { g = geocode_(address, name); } catch (e) { g = null; }
+    }
     appendObj_(sh, {
       id: Utilities.getUuid(),
       name: name, category: category, address: address,

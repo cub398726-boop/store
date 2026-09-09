@@ -108,10 +108,36 @@
     border-radius:10px;padding:11px 14px;cursor:pointer;margin-top:8px;
   }
   .add-toggle:hover{border-color:var(--ink-soft);color:var(--ink)}
-  .addform{
-    display:grid;grid-template-columns:1fr;gap:10px;
+  .addbox{
     padding:16px;border:1px solid var(--line);border-radius:12px;
     background:var(--paper-2);margin:8px 0 2px;
+  }
+  .addsearch{display:flex;gap:8px}
+  .addsearch .js-search{
+    flex:1;min-width:0;font:inherit;padding:9px 11px;
+    border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);
+  }
+  .srch{
+    font:inherit;font-size:13px;padding:9px 16px;border:none;border-radius:8px;
+    background:var(--seal);color:var(--seal-ink);cursor:pointer;flex:none;
+  }
+  .srch[disabled]{opacity:.6;cursor:default}
+  .srch-empty{margin-top:8px;font-size:12px;color:var(--ink-soft)}
+  .srch-list{margin-top:8px;display:flex;flex-direction:column;gap:1px;
+    border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .srch-item{
+    display:grid;grid-template-columns:1fr auto;gap:2px 8px;
+    text-align:left;font:inherit;padding:9px 11px;border:none;cursor:pointer;
+    background:var(--paper);color:var(--ink);
+  }
+  .srch-item:hover{background:var(--paper-2)}
+  .si-name{font-weight:700;font-size:13.5px}
+  .si-cat{font-size:11px;color:var(--ink-soft);align-self:center}
+  .si-addr{grid-column:1/-1;font-size:11.5px;color:var(--ink-soft)}
+  .srch-picked{margin-top:10px;font-size:12px;color:var(--seal)}
+  .srch-picked b{color:var(--ink)}
+  .addform{
+    display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px;
   }
   @media(min-width:580px){ .addform{grid-template-columns:2fr 1fr 2fr auto} }
   .addform input,.addform select{
@@ -318,6 +344,9 @@
     expandedId: null,
     addOpen: false,
     draftPlace: { name:"", category:"한식", address:"" },
+    draftSearch: "",
+    searchResults: null,     // null=안함, []=결과없음, [..]=결과
+    searchBusy: false,
     draftReview: {},
     toast: null,
     highlightId: null,
@@ -524,6 +553,30 @@
     var h = '<button class="add-toggle" data-act="toggle-add" aria-expanded="' + state.addOpen + '">' +
             (state.addOpen ? "− 접기" : "+ 새 가게 장부에 올리기") + '</button>';
     if(!state.addOpen) return h;
+
+    h += '<div class="addbox">';
+
+    // 업체명 검색
+    h += '<div class="addsearch">' +
+      '<input class="js-search" data-fk="place-search" value="' + esc(state.draftSearch) + '" placeholder="가게 이름으로 검색 (예: 무수옥 도봉)" maxlength="40">' +
+      '<button class="srch" data-act="place-search"' + (state.searchBusy ? " disabled" : "") + '>' + (state.searchBusy ? "검색 중…" : "검색") + '</button>' +
+    '</div>';
+
+    if(state.searchResults !== null){
+      if(!state.searchResults.length){
+        h += '<div class="srch-empty">검색 결과가 없어요. 아래에 직접 입력해도 됩니다.</div>';
+      } else {
+        h += '<div class="srch-list">' + state.searchResults.map(function(it, i){
+          return '<button class="srch-item" data-act="pick" data-i="' + i + '">' +
+            '<span class="si-name">' + esc(it.name) + '</span>' +
+            '<span class="si-cat">' + esc(it.category || "기타") + '</span>' +
+            '<span class="si-addr">' + esc(it.address || "") + '</span>' +
+          '</button>';
+        }).join("") + '</div>';
+      }
+    }
+
+    // 직접 입력 / 확인 폼
     h += '<div class="addform">' +
       '<input class="js-place" data-field="name" data-fk="place-name" value="' + esc(state.draftPlace.name) + '" placeholder="업체명 (필수)" maxlength="40">' +
       '<select data-act="draft-cat" aria-label="분류">' +
@@ -532,6 +585,12 @@
       '<input class="js-place" data-field="address" data-fk="place-addr" value="' + esc(state.draftPlace.address) + '" placeholder="주소 (필수, 도로명 또는 지번)" maxlength="80">' +
       '<button class="go" data-act="add-place">올리기</button>' +
     '</div>';
+
+    if(state.draftPlace._lat && state.draftPlace._lng){
+      h += '<div class="srch-picked">✓ 지도 위치 확인됨 — 그대로 <b>올리기</b> 하세요</div>';
+    }
+
+    h += '</div>';
     return h;
   }
   function bannersHtml(){
@@ -730,7 +789,7 @@
     }
     slot.appendChild(mapHostEl);
     if(!lmap){
-      lmap = L.map(mapHostEl, { scrollWheelZoom: true }).setView([37.5665, 126.9780], 11);
+      lmap = L.map(mapHostEl, { scrollWheelZoom: true }).setView([37.6688, 127.0471], 14); // 도봉구
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "&copy; OpenStreetMap"
@@ -804,6 +863,37 @@
     if(state.mode !== "online"){ toast("아직 불러오는 중이에요"); return false; }
     return true;
   }
+  function doPlaceSearch(){
+    var q = state.draftSearch.trim();
+    if(q.length < 2){ toast("가게 이름을 2자 이상 입력해 주세요"); return; }
+    if(state.mode !== "online"){ toast("아직 불러오는 중이에요"); return; }
+    state.searchBusy = true; render();
+    gsRun("searchPlaces", q).then(function(r){
+      state.searchBusy = false;
+      state.searchResults = (r && r.ok && r.items) ? r.items : [];
+      if(r && !r.ok) toast(r.error === "no_key" ? "카카오 키가 등록되지 않았어요" : "검색에 실패했어요");
+      render();
+    }).catch(function(e){
+      state.searchBusy = false;
+      state.searchResults = [];
+      toast(friendly(e));
+      render();
+    });
+  }
+  function pickResult(i){
+    var it = state.searchResults && state.searchResults[i];
+    if(!it) return;
+    state.draftPlace = {
+      name: it.name || "",
+      category: it.category || "기타",
+      address: it.address || "",
+      _lat: it.lat || 0,
+      _lng: it.lng || 0
+    };
+    state.searchResults = null;
+    render();
+    focusSel('[data-act="add-place"]');
+  }
   function doAddPlace(){
     if(!guardWrite()) return;
     var name = state.draftPlace.name.trim();
@@ -811,9 +901,15 @@
     if(!name){ toast("업체명을 입력해 주세요"); focusSel('[data-fk="place-name"]'); return; }
     if(!address){ toast("주소를 입력해 주세요"); focusSel('[data-fk="place-addr"]'); return; }
     var payload = { name: name, category: state.draftPlace.category, address: address };
+    if(state.draftPlace._lat && state.draftPlace._lng){
+      payload.lat = state.draftPlace._lat;
+      payload.lng = state.draftPlace._lng;
+    }
     toast("올리는 중…");
     gsRun("addPlace", payload).then(function(){
       state.draftPlace = { name:"", category: state.draftPlace.category, address:"" };
+      state.draftSearch = "";
+      state.searchResults = null;
       state.addOpen = false;
       toast("장부에 올렸어요");
       loadAll(true);
@@ -865,8 +961,10 @@
     var actEl = e.target.closest("[data-act]");
     if(actEl){
       var act = actEl.dataset.act;
-      if(act === "toggle-add"){ state.addOpen = !state.addOpen; render(); return; }
+      if(act === "toggle-add"){ state.addOpen = !state.addOpen; if(!state.addOpen){ state.searchResults = null; } render(); return; }
       if(act === "add-place"){ doAddPlace(); return; }
+      if(act === "place-search"){ doPlaceSearch(); return; }
+      if(act === "pick"){ pickResult(+actEl.dataset.i); return; }
       if(act === "view"){ if(state.view !== actEl.dataset.val){ state.view = actEl.dataset.val; render(); } return; }
       if(act === "filter"){ state.filter = actEl.dataset.val; render(); return; }
       if(act === "sort"){ state.sort = state.sort === "rating" ? "recent" : "rating"; render(); return; }
@@ -885,7 +983,14 @@
 
   app.addEventListener("input", function(e){
     var t = e.target;
-    if(t.classList.contains("js-place")){ state.draftPlace[t.dataset.field] = t.value; }
+    if(t.classList.contains("js-place")){
+      state.draftPlace[t.dataset.field] = t.value;
+      // 직접 손대면 검색으로 잡은 좌표는 무효화
+      state.draftPlace._lat = 0; state.draftPlace._lng = 0;
+      var picked = app.querySelector(".srch-picked");
+      if(picked) picked.hidden = true;
+    }
+    else if(t.classList.contains("js-search")){ state.draftSearch = t.value; }
     else if(t.classList.contains("js-cmt")){ getDraft(t.dataset.place).comment = t.value; }
   });
 
@@ -906,6 +1011,7 @@
       e.preventDefault(); toggleExpand(t.dataset.row);
     }
     if(t.dataset && t.dataset.fk === "place-addr" && e.key === "Enter"){ e.preventDefault(); doAddPlace(); }
+    if(t.dataset && t.dataset.fk === "place-search" && e.key === "Enter"){ e.preventDefault(); doPlaceSearch(); }
   });
 
   /* ---------- boot ---------- */
