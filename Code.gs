@@ -274,6 +274,20 @@ function deleteRowsById_(name, cols, colName, id) {
   }
 }
 
+/* ---------- 진단 (편집기에서 직접 실행) ---------- */
+
+function diag() {
+  var d = getAll();
+  Logger.log('가게 수: ' + d.places.length);
+  d.places.slice(0, 4).forEach(function (p) { Logger.log(JSON.stringify(p)); });
+  var withCoord = d.places.filter(function (p) { return Number(p.lat) && Number(p.lng); }).length;
+  Logger.log('좌표 채워진 곳: ' + withCoord + ' / ' + d.places.length);
+
+  var s = searchPlaces('스타벅스 강남역');
+  Logger.log('searchPlaces  ok=' + s.ok + '  items=' + ((s.items || []).length) + '  error=' + (s.error || '-'));
+  if ((s.items || []).length) Logger.log('첫 결과: ' + JSON.stringify(s.items[0]));
+}
+
 /* ---------- 진단: 카카오 키/응답 확인 (편집기에서 직접 실행) ---------- */
 
 function testGeocode() {

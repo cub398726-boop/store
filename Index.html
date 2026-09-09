@@ -814,7 +814,9 @@
       var pts = [];
       pins.forEach(function(p){
         var m = L.marker([+p.lat, +p.lng], { icon: pin(state._rankMap[p.id], p.count) });
-        m.bindPopup(mpopHtml(p), { minWidth: 180 });
+        var tip = esc(p.name) + " · " + (p.count ? (p.overall.toFixed(1) + "점") : "평가 없음");
+        m.bindTooltip(tip, { direction: "top", offset: [0, -22] });   // 마우스 오버
+        m.bindPopup(mpopHtml(p), { minWidth: 180 });                  // 클릭
         m.on("popupopen", onPopupOpen);
         lmarkers.addLayer(m);
         _markerById[p.id] = m;
