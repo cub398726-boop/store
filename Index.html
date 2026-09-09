@@ -225,7 +225,12 @@
   .rev-when{color:var(--ink-soft);font-size:11px}
   .rev-cmt{margin-top:5px;color:var(--ink)}
   .rev-dims{margin-top:5px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;color:var(--ink-soft)}
+  .rev-actions{margin-left:auto;display:flex;gap:10px;flex:none}
+  .rev-edit{font:inherit;font-size:11px;color:var(--focus);background:none;border:none;cursor:pointer;padding:0}
   .rev-del{font:inherit;font-size:11px;color:var(--seal);background:none;border:none;cursor:pointer;padding:0}
+  .rev.editing{border-left:2px solid var(--seal);padding-left:9px;margin-left:-11px}
+  .revform-edit{font-size:12px;font-weight:700;color:var(--seal)}
+  .link-plain{font:inherit;font-size:12px;color:var(--ink-soft);background:none;border:none;cursor:pointer;padding:0;margin-left:auto}
 
   .revform{margin-top:14px;display:grid;gap:11px}
   .rate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 20px}
@@ -369,6 +374,8 @@
     searchResults: null,     // null=안함, []=결과없음, [..]=결과
     searchBusy: false,
     draftReview: {},
+    editingId: null,        // 수정 중인 리뷰 id
+    editingPlace: null,
     toast: null,
     highlightId: null,
     view: "list",           // list | map
@@ -442,6 +449,7 @@
     if(m.indexOf("업체명") >= 0) return "업체명을 입력해 주세요";
     if(m.indexOf("주소") >= 0) return "주소를 입력해 주세요";
     if(m.indexOf("별점") >= 0) return "모든 항목에 별점을 매겨 주세요";
+    if(m.indexOf("찾을 수 없") >= 0) return "평가를 찾지 못했어요. 새로고침 후 다시 시도해 주세요";
     if(/too many|Service|quota|Lock|timed out/i.test(m)) return "구글 요청이 몰렸어요. 잠시 후 다시 시도해 주세요";
     return "처리하지 못했어요. 잠시 후 다시 시도해 주세요";
   }
@@ -484,7 +492,8 @@
           id: String(r.id),
           placeId: String(r.placeId == null ? "" : r.placeId),
           comment: String(r.comment == null ? "" : r.comment),
-          createdAt: +r.createdAt || 0
+          createdAt: +r.createdAt || 0,
+          editedAt: +r.editedAt || 0
         };
         DIMS.forEach(function(x){ o[x[0]] = +r[x[0]] || 0; });
         return o;
@@ -639,12 +648,17 @@
            '<span class="dim-v">' + (has ? v.toFixed(1) : "–") + '</span></div>';
   }
   function panelHtml(p){
+    var isEditing = state.editingId && p.reviews.some(function(r){ return r.id === state.editingId; });
     var revs = p.reviews.map(function(r){
-      return '<div class="rev">' +
+      var when = relTime(r.createdAt) + (r.editedAt ? " (수정됨)" : "");
+      return '<div class="rev' + (state.editingId === r.id ? " editing" : "") + '">' +
         '<div class="rev-head">' +
           '<span class="rev-num">' + revOverall(r).toFixed(1) + '</span>' +
-          '<span class="rev-when">' + relTime(r.createdAt) + '</span>' +
-          '<button class="rev-del" data-act="del-review" data-id="' + esc(r.id) + '" style="margin-left:auto">삭제</button>' +
+          '<span class="rev-when">' + when + '</span>' +
+          '<span class="rev-actions">' +
+            '<button class="rev-edit" data-act="edit-review" data-id="' + esc(r.id) + '" data-place="' + esc(p.id) + '">수정</button>' +
+            '<button class="rev-del" data-act="del-review" data-id="' + esc(r.id) + '">삭제</button>' +
+          '</span>' +
         '</div>' +
         (r.comment ? '<div class="rev-cmt">' + esc(r.comment) + '</div>' : '') +
         '<div class="rev-dims">' + DIMS.map(function(x){ return x[1] + ' ' + (+r[x[0]] || 0); }).join(' &middot; ') + '</div>' +
@@ -667,11 +681,14 @@
     return '<div class="panel">' +
       '<div class="revs">' + revs + '</div>' +
       '<div class="revform">' +
+        (isEditing ? '<div class="revform-edit">평가 수정 중</div>' : '') +
         '<div class="rate-grid">' + rateGrid + '</div>' +
         '<textarea class="js-cmt" data-place="' + esc(p.id) + '" data-fk="rev-comment-' + esc(p.id) + '" maxlength="140" placeholder="한줄평 (선택) — 예: 웨이팅 있지만 값어치 함">' + esc(d.comment) + '</textarea>' +
         '<div class="revform-actions">' +
-          '<button class="go" data-act="add-review" data-place="' + esc(p.id) + '">평가 남기기</button>' +
-          '<button class="link-danger" data-act="del-place" data-id="' + esc(p.id) + '">이 가게 삭제</button>' +
+          '<button class="go" data-act="add-review" data-place="' + esc(p.id) + '">' + (isEditing ? "수정 저장" : "평가 남기기") + '</button>' +
+          (isEditing
+            ? '<button class="link-plain" data-act="cancel-edit" data-place="' + esc(p.id) + '">취소</button>'
+            : '<button class="link-danger" data-act="del-place" data-id="' + esc(p.id) + '">이 가게 삭제</button>') +
         '</div>' +
       '</div>' +
     '</div>';
@@ -866,8 +883,34 @@
   }
 
   /* ---------- actions ---------- */
+  function clearEdit(){
+    if(state.editingPlace){ state.draftReview[state.editingPlace] = emptyDraft(); }
+    state.editingId = null;
+    state.editingPlace = null;
+  }
   function toggleExpand(id){
-    state.expandedId = state.expandedId === id ? null : id;
+    var closing = state.expandedId === id;
+    if(closing && state.editingPlace === id) clearEdit();
+    state.expandedId = closing ? null : id;
+    render();
+  }
+  function startEditReview(placeId, reviewId){
+    var r = state.reviews.filter(function(x){ return x.id === reviewId; })[0];
+    if(!r){ toast("평가를 찾지 못했어요"); return; }
+    if(state.editingPlace && state.editingPlace !== placeId){
+      state.draftReview[state.editingPlace] = emptyDraft();
+    }
+    var d = getDraft(placeId);
+    DIMS.forEach(function(x){ d[x[0]] = +r[x[0]] || 0; });
+    d.comment = r.comment || "";
+    state.editingId = reviewId;
+    state.editingPlace = placeId;
+    state.expandedId = placeId;
+    render();
+    focusSel('[data-fk="rev-comment-' + placeId + '"]');
+  }
+  function cancelEdit(){
+    clearEdit();
     render();
   }
   function doRoll(){
@@ -949,8 +992,21 @@
     var ok = true;
     for(var i=0;i<DIMS.length;i++){ if(!(d[DIMS[i][0]] >= 1)) ok = false; }
     if(!ok){ toast("모든 항목에 별점을 매겨 주세요"); return; }
-    var payload = { placeId: placeId, comment: d.comment.trim() };
+    var payload = { comment: d.comment.trim() };
     for(var j=0;j<DIMS.length;j++){ payload[DIMS[j][0]] = d[DIMS[j][0]]; }
+
+    var editingId = (state.editingPlace === placeId) ? state.editingId : null;
+    if(editingId){
+      payload.id = editingId;
+      toast("수정 중…");
+      gsRun("updateReview", payload).then(function(){
+        clearEdit();
+        toast("수정했어요");
+        loadAll(true);
+      }).catch(function(e){ toast(friendly(e)); });
+      return;
+    }
+    payload.placeId = placeId;
     toast("저장 중…");
     gsRun("addReview", payload).then(function(){
       delete state.draftReview[placeId];
@@ -999,6 +1055,8 @@
       if(act === "roll"){ doRoll(); return; }
       if(act === "star"){ setStar(actEl.dataset.place, actEl.dataset.dim, +actEl.dataset.val); return; }
       if(act === "add-review"){ doAddReview(actEl.dataset.place); return; }
+      if(act === "edit-review"){ startEditReview(actEl.dataset.place, actEl.dataset.id); return; }
+      if(act === "cancel-edit"){ cancelEdit(); return; }
       if(act === "del-review"){ doDelReview(actEl.dataset.id); return; }
       if(act === "del-place"){ doDelPlace(actEl.dataset.id); return; }
       return;

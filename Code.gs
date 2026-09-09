@@ -26,7 +26,7 @@
 var PLACES = 'places';
 var REVIEWS = 'reviews';
 var PLACE_COLS = ['id', 'name', 'category', 'address', 'lat', 'lng', 'createdAt'];
-var REVIEW_COLS = ['id', 'placeId', 'taste', 'price', 'mood', 'service', 'hygiene', 'comment', 'createdAt'];
+var REVIEW_COLS = ['id', 'placeId', 'taste', 'price', 'mood', 'service', 'hygiene', 'comment', 'createdAt', 'editedAt'];
 var DIM_KEYS = ['taste', 'price', 'mood', 'service', 'hygiene'];
 
 var UI_URL = 'https://raw.githubusercontent.com/cub398726-boop/store/main/Index.html';
@@ -231,6 +231,42 @@ function addReview(v) {
     obj.comment = String((v && v.comment) || '').trim().slice(0, 200);
     obj.createdAt = Date.now();
     appendObj_(sheet_(REVIEWS, REVIEW_COLS), obj);
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateReview(v) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var id = String((v && v.id) || '');
+    if (!id) throw new Error('id가 필요합니다');
+    var sh = sheet_(REVIEWS, REVIEW_COLS);
+    var last = sh.getLastRow();
+    if (last < 2) throw new Error('평가를 찾을 수 없습니다');
+    var header = headerOf_(sh);
+    var iId = header.indexOf('id');
+    var ids = sh.getRange(2, iId + 1, last - 1, 1).getValues();
+    var rowNum = -1;
+    for (var r = 0; r < ids.length; r++) {
+      if (String(ids[r][0]) === id) { rowNum = r + 2; break; }
+    }
+    if (rowNum < 0) throw new Error('평가를 찾을 수 없습니다');
+
+    var score = function (x) { x = Math.round(Number(x)); return (x >= 1 && x <= 5) ? x : 0; };
+    var rowVals = sh.getRange(rowNum, 1, 1, header.length).getValues()[0];
+    for (var i = 0; i < DIM_KEYS.length; i++) {
+      var s = score(v && v[DIM_KEYS[i]]);
+      if (!s) throw new Error('모든 항목에 별점이 필요합니다');
+      rowVals[header.indexOf(DIM_KEYS[i])] = s;
+    }
+    var ic = header.indexOf('comment');
+    if (ic !== -1) rowVals[ic] = String((v && v.comment) || '').trim().slice(0, 200);
+    var ie = header.indexOf('editedAt');
+    if (ie !== -1) rowVals[ie] = Date.now();
+    sh.getRange(rowNum, 1, 1, header.length).setValues([rowVals]);
     return { ok: true };
   } finally {
     lock.releaseLock();
