@@ -20,6 +20,8 @@
     --seal-ink:#FBF2EF;
     --amber:#CF8F1E;
     --focus:#2F6FB3;
+    --c-food:#BF4D3A;
+    --c-cafe:#2F7D6C;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
@@ -33,6 +35,8 @@
       --seal-ink:#1B1210;
       --amber:#E4AC4E;
       --focus:#6BA8E0;
+      --c-food:#E27D64;
+      --c-cafe:#5EAB96;
     }
   }
   :root[data-theme="dark"]{
@@ -46,6 +50,8 @@
     --seal-ink:#1B1210;
     --amber:#E4AC4E;
     --focus:#6BA8E0;
+    --c-food:#E27D64;
+    --c-cafe:#5EAB96;
   }
 
   *{box-sizing:border-box}
@@ -132,7 +138,9 @@
   }
   .srch-item:hover{background:var(--paper-2)}
   .si-name{font-weight:700;font-size:13.5px}
-  .si-cat{font-size:11px;color:var(--ink-soft);align-self:center}
+  .si-cat{font-size:11px;color:var(--ink-soft);align-self:center;font-weight:700}
+  .si-cat.food{color:var(--c-food)}
+  .si-cat.cafe{color:var(--c-cafe)}
   .si-addr{grid-column:1/-1;font-size:11.5px;color:var(--ink-soft)}
   .srch-picked{margin-top:10px;font-size:12px;color:var(--seal)}
   .srch-picked b{color:var(--ink)}
@@ -183,6 +191,8 @@
   .r-name .chev{color:var(--ink-soft);font-weight:400;font-size:12px}
   .r-meta{display:flex;flex-wrap:wrap;align-items:center;gap:5px 10px;margin-top:4px;font-size:12px;color:var(--ink-soft)}
   .cat{border:1px solid var(--line);border-radius:999px;padding:1px 8px}
+  .cat.food{border-color:var(--c-food);color:var(--c-food)}
+  .cat.cafe{border-color:var(--c-cafe);color:var(--c-cafe)}
   .meta-map{font:inherit;font-size:12px;color:var(--focus);text-decoration:underline;cursor:pointer}
   .dims{
     display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
@@ -285,8 +295,19 @@
     transform:rotate(45deg);color:#fff;
     font:600 11px/1 "IBM Plex Mono",ui-monospace,monospace;
   }
-  .mk-top{background:var(--seal)}
-  .mk-none{background:var(--ink-soft)}
+  .mk-food{background:var(--c-food)}
+  .mk-cafe{background:var(--c-cafe)}
+
+  .map-legend{
+    margin-top:8px;display:flex;gap:16px;align-items:center;
+    font-size:12px;color:var(--ink-soft);
+  }
+  .map-legend .lg{
+    display:inline-block;width:11px;height:11px;border-radius:50%;
+    margin-right:5px;vertical-align:-1px;
+  }
+  .lg-food{background:var(--c-food)}
+  .lg-cafe{background:var(--c-cafe)}
 
   .mpop-name{font-weight:700;font-size:14px;color:#212B36}
   .mpop-meta{font-size:12px;color:#61697A;margin:3px 0 8px}
@@ -572,7 +593,7 @@
         h += '<div class="srch-list">' + state.searchResults.map(function(it, i){
           return '<button class="srch-item" data-act="pick" data-i="' + i + '">' +
             '<span class="si-name">' + esc(it.name) + '</span>' +
-            '<span class="si-cat">' + esc(it.category || "기타") + '</span>' +
+            '<span class="si-cat ' + (it.category === "카페" ? "cafe" : "food") + '">' + esc(it.category || "기타") + '</span>' +
             '<span class="si-addr">' + esc(it.address || "") + '</span>' +
           '</button>';
         }).join("") + '</div>';
@@ -666,7 +687,7 @@
       '<div class="r-main">' +
         '<div class="r-name">' + esc(p.name) + ' <span class="chev">' + (expanded ? "▴" : "▾") + '</span></div>' +
         '<div class="r-meta">' +
-          '<span class="cat">' + esc(p.category) + '</span>' +
+          '<span class="cat ' + (p.category === "카페" ? "cafe" : "food") + '">' + esc(p.category) + '</span>' +
           (p.address ? '<span>' + esc(p.address) + '</span>' : '') +
           '<a class="meta-map" href="' + mapUrl(p.name, p.address) + '" target="_blank" rel="noopener noreferrer">지도</a>' +
           '<span>' + relTime(p.createdAt) + ' 등록</span>' +
@@ -703,7 +724,9 @@
 
     var main;
     if(state.view === "map"){
-      main = '<div id="mapmount" class="mapmount"></div>' + mapNoteHtml();
+      main = '<div id="mapmount" class="mapmount"></div>' +
+        '<div class="map-legend"><span><i class="lg lg-food"></i>밥집</span><span><i class="lg lg-cafe"></i>카페</span></div>' +
+        mapNoteHtml();
     } else {
       var body = list.length
         ? list.map(function(p){ return rowHtml(p, rankMap); }).join("")
@@ -749,8 +772,8 @@
     if(noC) return '<div class="map-note">' + noC + '곳은 주소를 좌표로 변환하지 못해 지도에 없어요.</div>';
     return "";
   }
-  function pin(rank, count){
-    var cls = rank && rank <= 3 ? "mk mk-top" : (count ? "mk" : "mk mk-none");
+  function pin(rank, isCafe){
+    var cls = "mk " + (isCafe ? "mk-cafe" : "mk-food");
     return L.divIcon({
       className: "",
       html: '<div class="' + cls + '"><span>' + (rank || "") + '</span></div>',
@@ -816,7 +839,7 @@
       lmarkers.clearLayers();
       var pts = [];
       pins.forEach(function(p){
-        var m = L.marker([+p.lat, +p.lng], { icon: pin(state._rankMap[p.id], p.count) });
+        var m = L.marker([+p.lat, +p.lng], { icon: pin(state._rankMap[p.id], p.category === "카페") });
         var tip = esc(p.name) + " · " + (p.count ? (p.overall.toFixed(1) + "점") : "평가 없음");
         m.bindTooltip(tip, { direction: "top", offset: [0, -22] });   // 마우스 오버
         m.bindPopup(mpopHtml(p), { minWidth: 180 });                  // 클릭
