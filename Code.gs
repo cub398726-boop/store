@@ -227,6 +227,28 @@ function deleteRowsById_(name, cols, colName, id) {
   }
 }
 
+/* ---------- 진단: 카카오 키/응답 확인 (편집기에서 직접 실행) ---------- */
+
+function testGeocode() {
+  var key = PropertiesService.getScriptProperties().getProperty('KAKAO_REST_KEY');
+  Logger.log('KEY: ' + (key ? (key.length + '자, 앞 4자리 ' + key.slice(0, 4)) : '없음(NULL)'));
+  if (!key) return;
+
+  var a = UrlFetchApp.fetch(
+    'https://dapi.kakao.com/v2/local/search/address.json?query=' + encodeURIComponent('서울 강남구 테헤란로 152'),
+    { method: 'get', headers: { Authorization: 'KakaoAK ' + key }, muteHttpExceptions: true }
+  );
+  Logger.log('[address] HTTP ' + a.getResponseCode());
+  Logger.log('[address] body: ' + a.getContentText().slice(0, 700));
+
+  var k = UrlFetchApp.fetch(
+    'https://dapi.kakao.com/v2/local/search/keyword.json?query=' + encodeURIComponent('스타벅스 강남역'),
+    { method: 'get', headers: { Authorization: 'KakaoAK ' + key }, muteHttpExceptions: true }
+  );
+  Logger.log('[keyword] HTTP ' + k.getResponseCode());
+  Logger.log('[keyword] body: ' + k.getContentText().slice(0, 700));
+}
+
 /* ---------- 좌표 일괄 채우기 (편집기에서 직접 실행) ---------- */
 
 function geocodeMissing() {
