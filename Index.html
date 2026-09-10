@@ -112,13 +112,6 @@
   }
   .chip:hover{border-color:var(--ink-3)}
   .chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink);font-weight:700}
-  .roll{
-    margin-left:auto;
-    font-family:var(--sans);font-weight:700;
-    font-size:14px;padding:9px 18px;border-radius:999px;border:none;
-    background:var(--seal);color:var(--seal-ink);cursor:pointer;transition:filter .12s;
-  }
-  .roll:hover{filter:brightness(1.06)}
 
   /* add place */
   .add-toggle{
@@ -592,8 +585,7 @@
     }).join("");
     var sortLabel = state.sort === "rating" ? "정렬: 평점순" : "정렬: 최근순";
     chips += '<button class="chip" data-act="sort" data-fk="sortbtn" aria-pressed="false">' + sortLabel + '</button>';
-    return '<div class="tools">' + chips +
-           '<button class="roll" data-act="roll">오늘 뭐 먹지?</button></div>';
+    return '<div class="tools">' + chips + '</div>';
   }
   function addHtml(){
     var h = '<button class="add-toggle" data-act="toggle-add" aria-expanded="' + state.addOpen + '">' +
@@ -846,17 +838,6 @@
     clearEdit();
     render();
   }
-  function doRoll(){
-    if(state._example){ toast("가게를 추가하면 추천이 시작돼요"); return; }
-    var pool = state._list;
-    if(!pool.length){ toast("추천할 가게가 없어요"); return; }
-    var unseen = pool.filter(function(p){ return p.count === 0; });
-    var arr = unseen.length ? unseen : pool;
-    var pick = arr[Math.floor(Math.random() * arr.length)];
-    state.expandedId = pick.id;
-    state.highlightId = pick.id;
-    render();
-  }
   function guardWrite(){
     if(state.mode === "offline"){ toast("서버에 연결되지 않았어요"); return false; }
     if(state.mode !== "online"){ toast("아직 불러오는 중이에요"); return false; }
@@ -979,7 +960,6 @@
       if(act === "pick"){ pickResult(+actEl.dataset.i); return; }
       if(act === "filter"){ state.filter = actEl.dataset.val; render(); return; }
       if(act === "sort"){ state.sort = state.sort === "rating" ? "recent" : "rating"; render(); return; }
-      if(act === "roll"){ doRoll(); return; }
       if(act === "star"){ setStar(actEl.dataset.place, actEl.dataset.dim, +actEl.dataset.val); return; }
       if(act === "add-review"){ doAddReview(actEl.dataset.place); return; }
       if(act === "edit-review"){ startEditReview(actEl.dataset.place, actEl.dataset.id); return; }
