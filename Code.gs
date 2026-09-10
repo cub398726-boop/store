@@ -44,7 +44,7 @@ function doGet() {
       + '화면 파일을 불러오지 못했어요: ' + e + '</body>';
   }
   return HtmlService.createHtmlOutput(html)
-    .setTitle('고수의집밥 맛집탐방')
+    .setTitle('근처맛집')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 

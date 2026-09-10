@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>고수의집밥 맛집탐방</title>
+<title>근처맛집</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700;900&family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -640,7 +640,7 @@
   function headerHtml(){
     return '' +
       '<header>' +
-        '<div class="brand">고수의집밥 맛집탐방<span class="dot">.</span></div>' +
+        '<div class="brand">근처맛집<span class="dot">.</span></div>' +
         '<div class="tagline">회사 점심 원정대 &middot; 도봉구 맛집과 카페 기록</div>' +
         '<div class="rule"></div>' +
       '</header>';
@@ -852,7 +852,9 @@
     state._rankMap = rankMap;
 
     var main;
-    if(state.view === "map"){
+    if(state.mode === "loading" && !loadedOnce){
+      main = "";   // 첫 로딩 중엔 예시 카드 대신 배너만
+    } else if(state.view === "map"){
       main = '<div id="mapmount" class="mapmount"></div>' +
         '<div class="map-legend"><span><i class="lg lg-food"></i>밥집</span><span><i class="lg lg-cafe"></i>카페</span></div>' +
         mapNoteHtml();
