@@ -25,7 +25,7 @@
 
 var PLACES = 'places';
 var REVIEWS = 'reviews';
-var PLACE_COLS = ['id', 'name', 'category', 'address', 'lat', 'lng', 'gRating', 'gCount', 'gUrl', 'gReviews', 'createdAt'];
+var PLACE_COLS = ['id', 'name', 'category', 'address', 'lat', 'lng', 'gRating', 'gCount', 'gUrl', 'gReviews', 'photoUrl', 'createdAt'];
 var REVIEW_COLS = ['id', 'placeId', 'taste', 'price', 'mood', 'service', 'hygiene', 'comment', 'createdAt', 'editedAt'];
 var DIM_KEYS = ['taste', 'price', 'mood', 'service', 'hygiene'];
 
@@ -185,7 +185,7 @@ function googlePlace_(query) {
       contentType: 'application/json',
       headers: {
         'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.reviews'
+        'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.reviews,places.photos'
       },
       payload: JSON.stringify({ textQuery: q, languageCode: 'ko', maxResultCount: 1 }),
       muteHttpExceptions: true
@@ -210,38 +210,75 @@ function googlePlace_(query) {
       gRating: p.rating || '',
       gCount: p.userRatingCount || '',
       gUrl: p.googleMapsUri || '',
-      gReviews: reviews.length ? JSON.stringify(reviews) : ''
+      gReviews: reviews.length ? JSON.stringify(reviews) : '',
+      photoName: (p.photos && p.photos[0] && p.photos[0].name) || ''
     };
   } catch (e) {
     return null;
   }
 }
 
-function backfillGoogle() {
-  if (!PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY')) {
-    throw new Error('먼저 스크립트 속성에 GOOGLE_PLACES_KEY 를 등록하세요 (README 참고).');
+/* 구글 사진 1장 → 내 드라이브에 저장 → 공개 썸네일 URL 반환 */
+function photoFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('PHOTO_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var f = DriveApp.createFolder('고수의집밥 맛집탐방 썸네일');
+  props.setProperty('PHOTO_FOLDER_ID', f.getId());
+  return f;
+}
+
+function fetchPhotoToDrive_(photoName, key, placeId) {
+  if (!photoName || !key) return '';
+  try {
+    var res = UrlFetchApp.fetch(
+      'https://places.googleapis.com/v1/' + photoName + '/media?maxWidthPx=480&key=' + key,
+      { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200) return '';
+    var blob = res.getBlob().setName(placeId + '.jpg');
+    var folder = photoFolder_();
+    var old = folder.getFilesByName(placeId + '.jpg');
+    while (old.hasNext()) old.next().setTrashed(true);
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return 'https://lh3.googleusercontent.com/d/' + file.getId() + '=w400-h300';
+  } catch (e) {
+    return '';
   }
+}
+
+function backfillGoogle() {
+  var key = PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY');
+  if (!key) throw new Error('먼저 스크립트 속성에 GOOGLE_PLACES_KEY 를 등록하세요 (README 참고).');
   var sh = sheet_(PLACES, PLACE_COLS);
   var last = sh.getLastRow();
   if (last < 2) return '가게가 없습니다.';
   var h = headerOf_(sh);
+  var iId = h.indexOf('id'), iN = h.indexOf('name'), iA = h.indexOf('address');
   var iR = h.indexOf('gRating'), iC = h.indexOf('gCount'), iU = h.indexOf('gUrl'),
-      iRv = h.indexOf('gReviews'), iN = h.indexOf('name'), iA = h.indexOf('address');
+      iRv = h.indexOf('gReviews'), iP = h.indexOf('photoUrl');
   var rng = sh.getRange(2, 1, last - 1, h.length);
   var vals = rng.getValues();
-  var done = 0, fail = 0, skip = 0;
+  var g = 0, ph = 0, fail = 0, skip = 0;
   for (var r = 0; r < vals.length; r++) {
-    if (vals[r][iR] !== '' && vals[r][iR] != null) { skip++; continue; }
+    var needG = !(vals[r][iR] !== '' && vals[r][iR] != null);
+    var needP = !vals[r][iP];
+    if (!needG && !needP) { skip++; continue; }
     var gp = googlePlace_(String(vals[r][iN] || '') + ' ' + String(vals[r][iA] || ''));
-    if (gp) {
+    if (!gp) { fail++; Utilities.sleep(200); continue; }
+    if (needG) {
       vals[r][iR] = gp.gRating; vals[r][iC] = gp.gCount;
       vals[r][iU] = gp.gUrl; vals[r][iRv] = gp.gReviews;
-      done++;
-    } else fail++;
+      g++;
+    }
+    if (needP && gp.photoName) {
+      var url = fetchPhotoToDrive_(gp.photoName, key, String(vals[r][iId] || ''));
+      if (url) { vals[r][iP] = url; ph++; }
+    }
     Utilities.sleep(250);
   }
   rng.setValues(vals);
-  var msg = '구글 평점 채움 ' + done + ' · 실패 ' + fail + ' · 이미있음 ' + skip;
+  var msg = '평점 ' + g + ' · 사진 ' + ph + ' · 실패 ' + fail + ' · 이미있음 ' + skip;
   Logger.log(msg);
   return msg;
 }
@@ -278,15 +315,23 @@ function addPlace(p) {
     var gp = null;
     try { gp = googlePlace_(name + ' ' + address); } catch (e) { gp = null; }
 
+    var id = Utilities.getUuid();
+    var photoUrl = '';
+    if (gp && gp.photoName) {
+      var gkey = PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY');
+      try { photoUrl = fetchPhotoToDrive_(gp.photoName, gkey, id); } catch (e) { photoUrl = ''; }
+    }
+
     appendObj_(sh, {
-      id: Utilities.getUuid(),
+      id: id,
       name: name, category: category, address: address,
       lat: g ? g.lat : '', lng: g ? g.lng : '',
       gRating: gp ? gp.gRating : '', gCount: gp ? gp.gCount : '',
       gUrl: gp ? gp.gUrl : '', gReviews: gp ? gp.gReviews : '',
+      photoUrl: photoUrl,
       createdAt: Date.now()
     });
-    return { ok: true, geocoded: !!g, google: !!gp };
+    return { ok: true, geocoded: !!g, google: !!gp, photo: !!photoUrl };
   } finally {
     lock.releaseLock();
   }

@@ -63,11 +63,15 @@ git add -A && git commit -m "수정" && git push
    - 값: 복사한 API 키
 6. `Code.gs` 붙여넣기 → 재배포(새 버전)
 
-### 기존 가게에 구글 평점 채우기
+### 기존 가게에 구글 평점 + 썸네일 채우기
 
 편집기 함수 선택 → **`backfillGoogle`** → 실행
-→ 시트 `places` 탭 `gRating`/`gCount`/`gUrl`/`gReviews` 열이 채워집니다.
-(새로 등록하는 가게는 자동으로 들어갑니다. 키가 없으면 그냥 비어서 표시만 안 됩니다.)
+→ `places` 탭 `gRating`/`gCount`/`gUrl`/`gReviews`/`photoUrl` 열이 채워집니다.
+(새로 등록하는 가게는 자동. 키가 없으면 비어서 표시만 안 됨.)
+
+**썸네일**: 구글 사진 1장을 받아 내 드라이브의 `고수의집밥 맛집탐방 썸네일` 폴더에 저장하고
+공개 링크(`lh3.googleusercontent.com/d/...`)를 씁니다. 사진 없는 가게는 분류 색 타일 + 첫 글자.
+→ `Code.gs` 에 `DriveApp` 이 추가돼서, **재배포할 때 권한 승인 창에 "Google Drive" 항목이 추가**됩니다. 허용해야 사진 저장이 됩니다.
 
 진단: 함수 선택 → **`diag`** 실행 → 로그에 `GOOGLE_PLACES_KEY` / `googlePlace rating=...` 확인.
 
