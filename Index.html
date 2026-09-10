@@ -385,11 +385,10 @@
     _list: []
   };
 
-  var EXEC_URL = "https://script.google.com/macros/s/AKfycbwRpgRaQWXuTo23b2OrXB8mWiU2SQJ4r8iY1ridkith9i6Uaw0j2XwEh9pYMVCeWhEWGg/exec";
-
   var app = document.getElementById("app");
   var toastTimer = 0;
   var loadedOnce = false;
+  var bootRetried = false;
 
   /* ---------- helpers ---------- */
   function esc(s){
@@ -469,17 +468,15 @@
     return "https://map.naver.com/p/search/" + encodeURIComponent(((name||"") + " " + (address||"")).trim());
   }
 
-  /* ---------- Apps Script JSON API (fetch) ---------- */
+  /* ---------- Apps Script bridge ---------- */
   function gsRun(method, arg){
-    var payload = { action: method };
-    if(arg && typeof arg === "object"){ for(var k in arg) payload[k] = arg[k]; }
-    return fetch(EXEC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    }).then(function(r){ return r.json(); }).then(function(j){
-      if(!j || !j.ok) throw new Error((j && j.error) || "서버 오류");
-      return j.data;
+    return new Promise(function(resolve, reject){
+      if(typeof google === "undefined" || !google.script || !google.script.run){
+        reject(new Error("NO_BACKEND")); return;
+      }
+      var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      if(arg === undefined) runner[method]();
+      else runner[method](arg);
     });
   }
   function loadAll(silent){
@@ -518,6 +515,10 @@
       loadedOnce = true;
       render();
     }).catch(function(e){
+      if(e && e.message === "NO_BACKEND"){
+        if(!bootRetried){ bootRetried = true; setTimeout(function(){ loadAll(true); }, 800); return; }
+        state.mode = "offline"; render(); return;
+      }
       if(!loadedOnce){ state.mode = "offline"; render(); }
       if(!silent) toast("불러오지 못했어요");
     });
@@ -632,7 +633,7 @@
   }
   function bannersHtml(){
     if(state.mode === "offline"){
-      return '<div class="banner warn">서버에 연결하지 못했어요. 잠시 후 새로고침 해주세요. 아래는 예시입니다.</div>';
+      return '<div class="banner warn">서버에 연결하지 못했어요. Apps Script 웹앱 URL로 열었는지 확인해 주세요. 아래는 예시입니다.</div>';
     }
     if(state.mode === "loading" && !loadedOnce){
       return '<div class="banner">맛집 목록을 불러오는 중…</div>';
@@ -847,7 +848,7 @@
     if(q.length < 2){ toast("가게 이름을 2자 이상 입력해 주세요"); return; }
     if(state.mode !== "online"){ toast("아직 불러오는 중이에요"); return; }
     state.searchBusy = true; render();
-    gsRun("searchPlaces", { query: q }).then(function(r){
+    gsRun("searchPlaces", q).then(function(r){
       state.searchBusy = false;
       state.searchResults = (r && r.ok && r.items) ? r.items : [];
       if(r && !r.ok) toast(r.error === "no_key" ? "카카오 키가 등록되지 않았어요" : "검색에 실패했어요");
@@ -925,7 +926,7 @@
   function doDelReview(id){
     if(!guardWrite()) return;
     if(!confirm("이 평가를 지울까요?")) return;
-    gsRun("deleteReview", { id: id }).then(function(){
+    gsRun("deleteReview", id).then(function(){
       toast("삭제했어요");
       loadAll(true);
     }).catch(function(e){ toast(friendly(e)); });
@@ -936,7 +937,7 @@
     var cnt = state.reviews.filter(function(r){ return r.placeId === id; }).length;
     var msg = (p ? p.name : "이 가게") + " 기록을 삭제할까요?" + (cnt ? (" 리뷰 " + cnt + "개도 함께 지워집니다.") : "");
     if(!confirm(msg)) return;
-    gsRun("deletePlace", { id: id }).then(function(){
+    gsRun("deletePlace", id).then(function(){
       if(state.expandedId === id) state.expandedId = null;
       toast("삭제했어요");
       loadAll(true);

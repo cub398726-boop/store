@@ -29,37 +29,23 @@ var PLACE_COLS = ['id', 'name', 'category', 'address', 'lat', 'lng', 'gRating', 
 var REVIEW_COLS = ['id', 'placeId', 'taste', 'price', 'mood', 'service', 'hygiene', 'comment', 'createdAt', 'editedAt'];
 var DIM_KEYS = ['taste', 'price', 'mood', 'service', 'hygiene'];
 
-/**
- * 이 스크립트는 이제 JSON API 입니다. 화면(index.html)은 Cloudflare Pages 가 서빙하고,
- * 여기로 fetch(POST, text/plain) 해서 데이터를 주고받습니다.
- * ⚠️ 배포 시 "액세스 권한: 모든 사용자" 여야 로그인 없이 fetch 됩니다.
- */
-function doGet(e) {
-  return json_(route_((e && e.parameter) || {}));
-}
-function doPost(e) {
-  var body = {};
-  try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) {}
-  return json_(route_(body));
-}
-function json_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-function route_(p) {
-  var action = p.action || '';
+var UI_URL = 'https://raw.githubusercontent.com/cub398726-boop/store/main/Index.html';
+
+function doGet() {
+  var html;
   try {
-    if (action === 'getAll')       return { ok: true, data: getAll() };
-    if (action === 'addPlace')     return { ok: true, data: addPlace(p) };
-    if (action === 'addReview')    return { ok: true, data: addReview(p) };
-    if (action === 'updateReview') return { ok: true, data: updateReview(p) };
-    if (action === 'deleteReview') return { ok: true, data: deleteReview(p.id) };
-    if (action === 'deletePlace')  return { ok: true, data: deletePlace(p.id) };
-    if (action === 'searchPlaces') return { ok: true, data: searchPlaces(p.query) };
-    return { ok: false, error: 'unknown action: ' + action };
-  } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    var res = UrlFetchApp.fetch(UI_URL, { muteHttpExceptions: true });
+    html = (res.getResponseCode() === 200)
+      ? res.getContentText()
+      : '<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif;padding:40px">'
+        + '화면 파일을 불러오지 못했어요 (HTTP ' + res.getResponseCode() + '). 잠시 후 새로고침 해주세요.';
+  } catch (e) {
+    html = '<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif;padding:40px">'
+      + '화면 파일을 불러오지 못했어요: ' + e + '</body>';
   }
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('근처맛집')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /* ---------- sheet helpers ---------- */
