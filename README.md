@@ -1,29 +1,37 @@
-# 고수의집밥 맛집탐방 — 배포 / 운영 메모
+# 근처맛집 — 배포 / 운영 메모
 
-- **화면(`Index.html`)** : 공개 GitHub 저장소 `cub398726-boop/store` 에서 서빙.
-  → 화면 수정은 `git push` 만. Apps Script 재배포 필요 없음.
-- **백엔드(`Code.gs`)** : 구글 Apps Script 웹앱. 시트 읽기/쓰기 + 화면 파일 중계 + 지오코딩.
-  → `Code.gs` 를 수정했을 때만 재배포.
-- 공용 암호 없음 — `/exec` 링크 아는 사람은 누구나 접속·평가.
+- **화면(`index.html`)** : **Cloudflare Pages** 가 `store` 저장소를 물려 서빙. `git push` → 자동 배포.
+  링크: `<프로젝트명>.pages.dev` (카카오톡 인앱 브라우저에서도 바로 열림)
+- **백엔드(`Code.gs`)** : 구글 Apps Script — **JSON API**. 시트 읽기/쓰기 + 카카오/구글 API + 사진.
+  화면이 `EXEC_URL` 로 `fetch(POST, text/plain)` 해서 통신.
+  → `Code.gs` 수정 시에만 **배포 관리 → 새 버전** 재배포. `/exec` URL 은 유지.
+- 공용 암호 없음. Apps Script 배포 액세스는 **"모든 사용자"** 여야 함 (로그인 없이 fetch).
 
 ## 파일
 
 | 파일 | 어디에 |
 |---|---|
 | `Code.gs` | Apps Script 프로젝트의 `Code.gs` 에 붙여넣기 |
-| `Index.html` | GitHub `store` 저장소 루트. (Apps Script 프로젝트에는 더 이상 안 넣음) |
+| `index.html` | `store` 저장소 루트 → Cloudflare Pages 가 서빙 |
 
-## 화면 수정 흐름 (재배포 없음)
+## Cloudflare Pages 최초 설정 (1회)
 
-```
-git add -A && git commit -m "수정" && git push
-```
-→ `/exec` 페이지에서 Ctrl+Shift+R (최대 몇 분, GitHub 캐시)
+1. [dash.cloudflare.com](https://dash.cloudflare.com) 가입(무료) → **Workers & Pages → Create → Pages → Connect to Git**
+2. GitHub 연결 → `store` 저장소 선택
+3. 빌드 설정:
+   - Framework preset: **None**
+   - Build command: **(비움)**
+   - Build output directory: **`/`**
+4. **프로젝트 이름** = 서브도메인 (예: `matjib` → `matjib.pages.dev`). 짧게.
+5. **Save and Deploy** → 몇십 초 뒤 `<이름>.pages.dev` 라이브
 
-## Code.gs 수정 흐름 (재배포 1회)
+이후 `git push` 하면 Cloudflare 가 자동으로 새로 배포합니다 (Apps Script 재배포 불필요).
 
-1. `Code.gs` 전체를 Apps Script 편집기에 붙여넣기 → 저장
-2. **배포 → 배포 관리 → ✏️ → 버전: "새 버전" → 배포** (`/exec` URL 유지)
+## Apps Script 를 API 로 재배포 (1회)
+
+1. `Code.gs` 전체 → 편집기에 붙여넣기 → 저장
+2. **배포 → 배포 관리 → ✏️ → 버전: "새 버전"**, 액세스: **모든 사용자** → 배포
+3. 나온 `/exec` URL 이 `index.html` 상단 `EXEC_URL` 과 같은지 확인 (다르면 교체 후 push)
 
 ---
 
