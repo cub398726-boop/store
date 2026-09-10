@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700;900&family=Gothic+A1:wght@400;500;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root{
     color-scheme: light;
@@ -103,17 +102,6 @@
   .brand .dot{color:var(--seal)}
   .tagline{margin-top:8px;font-size:13px;color:var(--ink-soft)}
   .rule{height:1px;background:var(--line);margin:20px 0 0}
-
-  /* view toggle (목록 / 지도) */
-  .viewtabs{
-    display:inline-flex;gap:3px;margin:18px 0 0;padding:4px;
-    border:1px solid var(--line);border-radius:12px;background:var(--paper-2);
-  }
-  .vt{
-    font:inherit;font-size:13px;font-weight:500;padding:6px 20px;border:none;border-radius:8px;
-    background:transparent;color:var(--ink-soft);cursor:pointer;transition:background .12s,color .12s;
-  }
-  .vt.on{background:var(--ink);color:var(--paper);font-weight:700}
 
   /* tools */
   .tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 4px}
@@ -346,48 +334,6 @@
     font-family:var(--sans);
   }
 
-  /* map */
-  .mapmount{margin-top:12px;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--elev)}
-  .map-host{height:480px;width:100%;background:var(--paper-2)}
-  .map-note{margin-top:10px;font-size:12px;color:var(--ink-soft)}
-  .map-note b{color:var(--ink)}
-  @media(max-width:470px){ .map-host{height:400px} }
-
-  .mk{
-    width:28px;height:28px;border-radius:50% 50% 50% 0;
-    transform:rotate(-45deg);
-    background:var(--amber);border:2.5px solid #fff;
-    box-shadow:0 2px 7px rgba(0,0,0,.35);
-    display:flex;align-items:center;justify-content:center;
-  }
-  .mk span{
-    transform:rotate(45deg);color:#fff;
-    font:800 11px/1 "Gothic A1",sans-serif;
-  }
-  .mk-food{background:var(--c-food)}
-  .mk-cafe{background:var(--c-cafe)}
-
-  .map-legend{
-    margin-top:10px;display:flex;gap:16px;align-items:center;
-    font-size:12px;color:var(--ink-soft);
-  }
-  .map-legend .lg{
-    display:inline-block;width:11px;height:11px;border-radius:50%;
-    margin-right:5px;vertical-align:-1px;
-  }
-  .lg-food{background:var(--c-food)}
-  .lg-cafe{background:var(--c-cafe)}
-
-  .leaflet-popup-content{font-family:"Gothic A1",sans-serif}
-  .mpop-name{font-family:"Noto Serif KR",serif;font-weight:700;font-size:15px;color:#241F1A}
-  .mpop-meta{font-size:12px;color:#6C635A;margin:3px 0 9px}
-  .mpop-go{
-    font:inherit;font-size:12px;font-weight:700;padding:5px 12px;border:none;border-radius:8px;
-    background:#C0392B;color:#fff;cursor:pointer;
-  }
-  .mpop-map{font-size:12px;font-weight:700;margin-left:10px;color:#2F6FB3;text-decoration:none}
-  .leaflet-container{font-family:"Gothic A1",sans-serif}
-
   @keyframes pulse{
     0%{box-shadow:var(--elev),0 0 0 0 color-mix(in srgb,var(--seal) 45%,transparent)}
     70%{box-shadow:var(--elev),0 0 0 10px color-mix(in srgb,var(--seal) 0%,transparent)}
@@ -399,7 +345,6 @@
 <body>
 <div class="wrap"><div id="app"></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (function(){
   "use strict";
@@ -443,20 +388,14 @@
     editingPlace: null,
     toast: null,
     highlightId: null,
-    view: "list",           // list | map
     _example: false,
-    _list: [],
-    _rankMap: {},
-    _rollId: null
+    _list: []
   };
 
   var app = document.getElementById("app");
   var toastTimer = 0;
   var loadedOnce = false;
   var bootRetried = false;
-
-  /* map instance (lives outside the re-rendered #app) */
-  var lmap = null, lmarkers = null, mapHostEl = null;
 
   /* ---------- helpers ---------- */
   function esc(s){
@@ -644,12 +583,6 @@
         '<div class="tagline">회사 점심 원정대 &middot; 도봉구 맛집과 카페 기록</div>' +
         '<div class="rule"></div>' +
       '</header>';
-  }
-  function viewTabsHtml(){
-    return '<div class="viewtabs">' +
-      '<button class="vt ' + (state.view === "list" ? "on" : "") + '" data-act="view" data-val="list" data-fk="vt-list">목록</button>' +
-      '<button class="vt ' + (state.view === "map" ? "on" : "") + '" data-act="view" data-val="map" data-fk="vt-map">지도</button>' +
-    '</div>';
   }
   function toolsHtml(){
     var filters = [["all","전체"],["food","밥집"],["cafe","카페"],["new","안 가본 곳"]];
@@ -849,15 +782,10 @@
       ? function(a,b){ return (b.createdAt||0) - (a.createdAt||0); }
       : function(a,b){ return (b.overall - a.overall) || (b.count - a.count) || ((b.createdAt||0) - (a.createdAt||0)); });
     state._list = state._example ? [] : list.slice();
-    state._rankMap = rankMap;
 
     var main;
     if(state.mode === "loading" && !loadedOnce){
       main = "";   // 첫 로딩 중엔 예시 카드 대신 배너만
-    } else if(state.view === "map"){
-      main = '<div id="mapmount" class="mapmount"></div>' +
-        '<div class="map-legend"><span><i class="lg lg-food"></i>밥집</span><span><i class="lg lg-cafe"></i>카페</span></div>' +
-        mapNoteHtml();
     } else {
       var body = list.length
         ? list.map(function(p){ return rowHtml(p, rankMap); }).join("")
@@ -869,15 +797,13 @@
     }
 
     app.innerHTML =
-      headerHtml() + viewTabsHtml() + toolsHtml() + addHtml() + bannersHtml() +
+      headerHtml() + toolsHtml() + addHtml() + bannersHtml() +
       main +
       (state.toast ? '<div class="toast">' + esc(state.toast) + '</div>' : '');
 
     restoreFocus(f);
 
-    if(state.view === "map") mountMap();
-
-    if(state.view === "list" && state.highlightId){
+    if(state.highlightId){
       var el = app.querySelector('[data-row="' + cssEsc(state.highlightId) + '"]');
       state.highlightId = null;
       if(el){
@@ -885,113 +811,6 @@
         el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
         el.classList.add("pulse");
         setTimeout(function(){ el.classList.remove("pulse"); }, 1600);
-      }
-    }
-  }
-
-  /* ---------- map ---------- */
-  function hasCoord(p){
-    var la = +p.lat, ln = +p.lng;
-    return la && ln && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
-  }
-  function mapNoteHtml(){
-    if(state._example) return '<div class="map-note">예시 상태예요. 가게를 등록하면 지도에 표시됩니다.</div>';
-    if(!state._list.length) return '<div class="map-note">조건에 맞는 가게가 없어요.</div>';
-    var withC = state._list.filter(hasCoord).length;
-    var noC = state._list.length - withC;
-    if(!withC) return '<div class="map-note">아직 좌표가 있는 가게가 없어요. <b>(관리자: Apps Script에서 geocodeMissing 실행)</b></div>';
-    if(noC) return '<div class="map-note">' + noC + '곳은 주소를 좌표로 변환하지 못해 지도에 없어요.</div>';
-    return "";
-  }
-  function pin(rank, isCafe){
-    var cls = "mk " + (isCafe ? "mk-cafe" : "mk-food");
-    return L.divIcon({
-      className: "",
-      html: '<div class="' + cls + '"><span>' + (rank || "") + '</span></div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 26],
-      popupAnchor: [0, -24]
-    });
-  }
-  function mpopHtml(p){
-    var score = p.count ? (p.overall.toFixed(1) + " · 평가 " + p.count) : "평가 없음";
-    return '<div class="mpop">' +
-      '<div class="mpop-name">' + esc(p.name) + '</div>' +
-      '<div class="mpop-meta">' + esc(p.category) + ' · ' + score + '</div>' +
-      '<button class="mpop-go" data-goid="' + esc(p.id) + '">목록에서 보기</button>' +
-      '<a class="mpop-map" href="' + mapUrl(p.name, p.address) + '" target="_blank" rel="noopener noreferrer">네이버지도</a>' +
-    '</div>';
-  }
-  function onPopupOpen(){
-    var b = document.querySelector('.leaflet-popup .mpop-go');
-    if(!b) return;
-    b.onclick = function(){
-      var id = b.getAttribute("data-goid");
-      state.view = "list";
-      state.expandedId = id;
-      state.highlightId = id;
-      render();
-    };
-  }
-  function mountMap(){
-    var slot = document.getElementById("mapmount");
-    if(!slot) return;
-    if(typeof L === "undefined"){
-      slot.innerHTML = '<div class="map-note" style="padding:40px 16px;text-align:center">지도를 불러오지 못했어요. 새로고침 해보세요.</div>';
-      return;
-    }
-    if(!mapHostEl){
-      mapHostEl = document.createElement("div");
-      mapHostEl.className = "map-host";
-    }
-    slot.appendChild(mapHostEl);
-    if(!lmap){
-      lmap = L.map(mapHostEl, { scrollWheelZoom: true }).setView([37.6688, 127.0471], 14); // 도봉구
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap"
-      }).addTo(lmap);
-      lmarkers = L.layerGroup().addTo(lmap);
-    }
-    lmap.invalidateSize();
-    syncMarkers();
-  }
-  var _markerSig = null, _markerById = {};
-  function syncMarkers(){
-    if(!lmap || !lmarkers) return;
-    var pins = state._list.filter(hasCoord);
-    var sig = pins.map(function(p){
-      return p.id + ":" + p.lat + "," + p.lng + ":" + p.count + ":" + (state._rankMap[p.id] || 0);
-    }).join("|");
-
-    if(sig !== _markerSig){
-      _markerSig = sig;
-      _markerById = {};
-      lmarkers.clearLayers();
-      var pts = [];
-      pins.forEach(function(p){
-        var m = L.marker([+p.lat, +p.lng], { icon: pin(state._rankMap[p.id], p.category === "카페") });
-        var tip = esc(p.name) + " · " + (p.count ? (p.overall.toFixed(1) + "점") : "평가 없음");
-        m.bindTooltip(tip, { direction: "top", offset: [0, -22] });   // 마우스 오버
-        m.bindPopup(mpopHtml(p), { minWidth: 180 });                  // 클릭
-        m.on("popupopen", onPopupOpen);
-        lmarkers.addLayer(m);
-        _markerById[p.id] = m;
-        pts.push([+p.lat, +p.lng]);
-      });
-      if(pts.length){
-        lmap.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
-      }
-    }
-
-    if(state._rollId){
-      var mk = _markerById[state._rollId];
-      state._rollId = null;
-      if(mk){
-        lmap.setView(mk.getLatLng(), Math.max(lmap.getZoom(), 15));
-        mk.openPopup();
-      } else {
-        toast("그 가게는 지도에 위치 정보가 없어요");
       }
     }
   }
@@ -1034,11 +853,6 @@
     var unseen = pool.filter(function(p){ return p.count === 0; });
     var arr = unseen.length ? unseen : pool;
     var pick = arr[Math.floor(Math.random() * arr.length)];
-    if(state.view === "map"){
-      state._rollId = pick.id;
-      render();
-      return;
-    }
     state.expandedId = pick.id;
     state.highlightId = pick.id;
     render();
@@ -1163,7 +977,6 @@
       if(act === "add-place"){ doAddPlace(); return; }
       if(act === "place-search"){ doPlaceSearch(); return; }
       if(act === "pick"){ pickResult(+actEl.dataset.i); return; }
-      if(act === "view"){ if(state.view !== actEl.dataset.val){ state.view = actEl.dataset.val; render(); } return; }
       if(act === "filter"){ state.filter = actEl.dataset.val; render(); return; }
       if(act === "sort"){ state.sort = state.sort === "rating" ? "recent" : "rating"; render(); return; }
       if(act === "roll"){ doRoll(); return; }
