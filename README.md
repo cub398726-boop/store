@@ -53,8 +53,8 @@ git add -A && git commit -m "수정" && git push
 가게를 추가할 때 구글의 **별점 · 리뷰 수 · 리뷰 3개**를 같이 저장해 참고용으로 보여줍니다.
 
 1. https://console.cloud.google.com → 프로젝트 생성(또는 기존 선택)
-2. **API 및 서비스 → 라이브러리** → **Places API** 검색 → **사용 설정**
-   (※ "Places API (New)" 말고 그냥 **Places API**)
+2. **API 및 서비스 → 라이브러리** → **Places API (New)** 검색 → **사용 설정**
+   (코드는 신버전 엔드포인트 `places.googleapis.com/v1` 을 씁니다)
 3. **결제** → 결제 계정 연결(카드 필요). 월 $200 무료 크레딧이 자동 적용돼 소규모 사용은 실비 0에 가깝습니다.
 4. **API 및 서비스 → 사용자 인증 정보 → 사용자 인증 정보 만들기 → API 키** → 키 복사
    - (권장) 키 수정 → **API 제한**에서 "Places API"만 허용

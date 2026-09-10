@@ -173,36 +173,43 @@ function kakaoCat_(gcode, cname) {
 
 /* ---------- 구글 플레이스: 남들 평점/리뷰 ---------- */
 
+/* Places API (New) — 한 번 호출로 평점 + 리뷰까지 */
 function googlePlace_(query) {
   var key = PropertiesService.getScriptProperties().getProperty('GOOGLE_PLACES_KEY');
   if (!key) return null;
   var q = String(query || '').trim();
   if (!q) return null;
   try {
-    var f = UrlFetchApp.fetch(
-      'https://maps.googleapis.com/maps/api/place/findplacefromtext/json?inputtype=textquery&language=ko&fields=place_id&input='
-      + encodeURIComponent(q) + '&key=' + key, { muteHttpExceptions: true });
-    var fj = JSON.parse(f.getContentText());
-    var cand = (fj.candidates || [])[0];
-    if (!cand || !cand.place_id) return null;
+    var res = UrlFetchApp.fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.displayName,places.rating,places.userRatingCount,places.googleMapsUri,places.reviews'
+      },
+      payload: JSON.stringify({ textQuery: q, languageCode: 'ko', maxResultCount: 1 }),
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) {
+      Logger.log('googlePlace HTTP ' + res.getResponseCode() + ' : ' + res.getContentText().slice(0, 300));
+      return null;
+    }
+    var p = ((JSON.parse(res.getContentText()).places) || [])[0];
+    if (!p) return null;
 
-    var d = UrlFetchApp.fetch(
-      'https://maps.googleapis.com/maps/api/place/details/json?language=ko&fields=rating,user_ratings_total,url,reviews&place_id='
-      + encodeURIComponent(cand.place_id) + '&key=' + key, { muteHttpExceptions: true });
-    var r = (JSON.parse(d.getContentText()).result) || {};
-
-    var reviews = (r.reviews || []).slice(0, 3).map(function (x) {
+    var reviews = (p.reviews || []).slice(0, 3).map(function (x) {
+      var t = (x.originalText && x.originalText.text) || (x.text && x.text.text) || '';
       return {
-        a: String(x.author_name || '').slice(0, 30),
+        a: String((x.authorAttribution && x.authorAttribution.displayName) || '').slice(0, 30),
         r: x.rating || 0,
-        w: String(x.relative_time_description || '').slice(0, 20),
-        t: String(x.text || '').replace(/\s+/g, ' ').trim().slice(0, 180)
+        w: String(x.relativePublishTimeDescription || '').slice(0, 20),
+        t: String(t).replace(/\s+/g, ' ').trim().slice(0, 180)
       };
     });
     return {
-      gRating: r.rating || '',
-      gCount: r.user_ratings_total || '',
-      gUrl: r.url || '',
+      gRating: p.rating || '',
+      gCount: p.userRatingCount || '',
+      gUrl: p.googleMapsUri || '',
       gReviews: reviews.length ? JSON.stringify(reviews) : ''
     };
   } catch (e) {
